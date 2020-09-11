@@ -1,0 +1,10 @@
+[Unit]
+Description = iscon
+
+[Service]
+ExecStart = /opt/isucon2020-himetex/tools/run.sh
+Restart = no
+Type = simple
+
+[Install]
+WantedBy = multi-user.target
