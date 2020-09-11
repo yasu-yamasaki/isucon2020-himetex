@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_DATABASE: torb
+      MYSQL_USER: isucon
+      MYSQL_PASSWORD: isucon
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      TZ: "Asia/Tokyo"
+    sysctls:
+      net.core.somaxconn: 8192
+    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./docker/db/data:/var/lib/mysql
+      - ./docker/db/my.cnf:/etc/mysql/conf.d
+      - ./docker/db/sql:/docker-entrypoint-initdb.d
+    networks:
+      isucon-net:
+    restart: always
+
+  nginx:
+    build:
+      context: ./nginx
+    environment:
+      TZ: Asia/Tokyo
+    sysctls:
+      net.core.somaxconn: 8192
+    networks:
+      isucon-net:
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d/:cached
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:cached
+      - ./nginx:/home
+      # - ./webapp/static:/var/www/static
+    depends_on:
+      - db
+    restart: always
+
+
+  # api:
+  #   build:
+  #     context: ./webapp/go
+  #   command: go run /go/src/torb/app.go
+  #   environment:
+  #     DB_DATABASE: torb
+  #     DB_HOST: db
+  #     DB_PORT: 3306
+  #     DB_USER: isucon
+  #     DB_PASS: isucon
+  #   sysctls:
+  #     net.core.somaxconn: 8192
+  #   volumes:
+  #     - ./webapp/go:/go:cached
+  #   networks:
+  #     - isucon-net
+
+networks:
+  isucon-net:

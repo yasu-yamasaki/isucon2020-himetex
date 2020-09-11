@@ -15,3 +15,6 @@
 # vendor/
 
 .idea
+
+docker/db/data
+.DS_Store
