@@ -3,8 +3,4 @@ docker の nginx で
 は stdout へのシンボリックリンクになっているので、
 access_log を/var/log/nginx/access2.log へ出すようにする
 
-alp 実行コマンド
-
-```bash
-alp -f /var/log/nginx/access2.log
-```
+alp はcheck.shで実行する
