@@ -407,15 +407,21 @@ func getLowPricedChair(c echo.Context) error {
 	ctx := newrelic.NewContext(c.Request().Context(), nrecho.FromContext(c))
 
 	var chairs []Chair
-	query := `SELECT * FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
-	err := db.withState.SelectContext(ctx, &chairs, query, Limit)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			c.Logger().Error("getLowPricedChair not found")
-			return c.JSON(http.StatusOK, ChairListResponse{[]Chair{}})
+	l, ok := chairCache.Get("LowPrice")
+	if ok {
+		chairs = l.([]Chair)
+	} else {
+		query := `SELECT * FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
+		err := db.withState.SelectContext(ctx, &chairs, query, Limit)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.Logger().Error("getLowPricedChair not found")
+				return c.JSON(http.StatusOK, ChairListResponse{[]Chair{}})
+			}
+			c.Logger().Errorf("getLowPricedChair DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
 		}
-		c.Logger().Errorf("getLowPricedChair DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+		chairCache.Add()
 	}
 
 	return c.JSON(http.StatusOK, ChairListResponse{Chairs: chairs})
