@@ -179,15 +179,10 @@ func initialize(c echo.Context) error {
 	}
 
 	ctx1 := context.Background()
-	ctx2 := context.Background()
 	var wg1 sync.WaitGroup
-	var wg2 sync.WaitGroup
 	ctx1, cancel1 := context.WithCancel(ctx1)
-	ctx2, cancel2 := context.WithCancel(ctx2)
 	defer cancel1()
-	defer cancel2()
-	limit1 := make(chan struct{}, 1)
-	limit2 := make(chan struct{}, 1)
+	limit1 := make(chan struct{}, 2)
 	for _, p := range paths {
 		sqlFile, _ := filepath.Abs(p)
 
@@ -216,35 +211,21 @@ func initialize(c echo.Context) error {
 				cancel1()
 			}
 		}()
-		go func() {
-			wg2.Add(1)
-			limit2 <- struct{}{}
-			defer func() {
-				wg2.Done()
-				<-limit2
-			}()
-			select {
-			case <-ctx2.Done():
-				return
-			default:
-			}
-			cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-				mySQLConnectionData.noState.Host,
-				mySQLConnectionData.noState.User,
-				mySQLConnectionData.noState.Password,
-				mySQLConnectionData.noState.Port,
-				mySQLConnectionData.noState.DBName,
-				sqlFile,
-			)
-			if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
-				c.Logger().Errorf("Initialize script error : %v", err)
-				cancel2()
-			}
-		}()
+		cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+			mySQLConnectionData.noState.Host,
+			mySQLConnectionData.noState.User,
+			mySQLConnectionData.noState.Password,
+			mySQLConnectionData.noState.Port,
+			mySQLConnectionData.noState.DBName,
+			sqlFile,
+		)
+		if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
+			c.Logger().Errorf("Initialize script error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
 	}
 	wg1.Wait()
-	wg2.Wait()
-	if ctx1.Err() != nil || ctx2.Err() != nil {
+	if ctx1.Err() != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
