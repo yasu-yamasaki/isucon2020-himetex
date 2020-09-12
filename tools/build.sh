@@ -1,5 +1,6 @@
 #!/bin/sh
-cd webapp/go
+cd go
 go mod vendor
-make build
-cd ../..
+make isuumo
+cp isuumo /home/isucon/isuumo/webapp/go/isuumo
+cd ..
