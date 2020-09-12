@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -196,6 +194,7 @@ func searchEstates(c echo.Context) error {
 
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+	ck := ""
 
 	page, err := strconv.Atoi(c.QueryParam("page"))
 	if err != nil {
@@ -218,6 +217,7 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("doorHeightRangeId") != "" {
 		doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.QueryParam("doorHeightRangeId"))
+		ck += c.QueryParam("doorHeightRangeId")
 		if err != nil {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -226,6 +226,7 @@ func searchEstates(c echo.Context) error {
 		if doorHeight.Min != -1 {
 			conditions = append(conditions, "door_height >= ?")
 			params = append(params, doorHeight.Min)
+
 		}
 		if doorHeight.Max != -1 {
 			conditions = append(conditions, "door_height < ?")
@@ -235,6 +236,7 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("doorWidthRangeId") != "" {
 		doorWidth, err := getRange(estateSearchCondition.DoorWidth, c.QueryParam("doorWidthRangeId"))
+		ck += c.QueryParam("doorWidthRangeId")
 		if err != nil {
 			c.Echo().Logger.Infof("doorWidthRangeID invalid, %v : %v", c.QueryParam("doorWidthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -252,6 +254,7 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("rentRangeId") != "" {
 		estateRent, err := getRange(estateSearchCondition.Rent, c.QueryParam("rentRangeId"))
+		ck += c.QueryParam("rentRangeId")
 		if err != nil {
 			c.Echo().Logger.Infof("rentRangeID invalid, %v : %v", c.QueryParam("rentRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -268,6 +271,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
+		ck += c.QueryParam("features")
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
@@ -285,10 +289,17 @@ func searchEstates(c echo.Context) error {
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
 	var res EstateSearchResponse
-	err = db.noState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchEstates DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	cc, ok := estateCache.Get(ck)
+	if ok {
+		s, _ := cc.(string)
+		res.Count, _ = strconv.ParseInt(s, 10, 64)
+	} else {
+		err = db.noState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchEstates DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		_ = estateCache.Add(ck, strconv.FormatInt(res.Count, 10), time.Minute*1)
 	}
 	if res.Count == 0 {
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
@@ -410,47 +421,26 @@ func searchEstateNazotte(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(ctx)
-	stopchan := make(chan struct{})
-	defer cancel()
-	limit := make(chan struct{}, 3)
 	estatesInPolygon := []Estate{}
 	for _, estate := range estatesInBoundingBox {
-		wg.Add(1)
-		limit <- struct{}{}
-		go func(estate Estate) {
-			defer func() {
-				wg.Done()
-				<-limit
-			}()
-			select {
-			case <-ctx.Done():
-				return
-			case <-stopchan:
-				return
-			default:
-			}
+		validatedEstate := Estate{}
 
-			validatedEstate := Estate{}
-
-			point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
-			query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
-			err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
-			if err != nil && err != sql.ErrNoRows {
-				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
-				cancel()
+		point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
+		query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
+		err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
 			} else {
-				estatesInPolygon = append(estatesInPolygon, validatedEstate)
+				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
+				return c.NoContent(http.StatusInternalServerError)
 			}
-			if len(estatesInPolygon) > NazotteLimit {
-				stopchan <- struct{}{}
-			}
-		}(estate)
-	}
-	wg.Wait()
-	if ctx.Err() != nil {
-		return c.NoContent(http.StatusInternalServerError)
+		} else {
+			estatesInPolygon = append(estatesInPolygon, validatedEstate)
+		}
+		if len(estatesInPolygon) > NazotteLimit {
+			break
+		}
 	}
 
 	var re EstateSearchResponse
