@@ -437,9 +437,9 @@ func searchEstateNazotte(c echo.Context) error {
 			point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
 			query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
 			err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
-			cancel()
 			if err != nil && err != sql.ErrNoRows {
 				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
+				cancel()
 			} else {
 				estatesInPolygon = append(estatesInPolygon, validatedEstate)
 			}
