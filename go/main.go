@@ -28,6 +28,7 @@ var chairSearchCondition ChairSearchCondition
 var estateSearchCondition EstateSearchCondition
 
 var estateCache *cache.Cache
+var chairCache *cache.Cache
 
 type InitializeResponse struct {
 	Language string `json:"language"`
@@ -167,6 +168,7 @@ func main() {
 	defer db.noState.Close()
 
 	estateCache = cache.New(5*time.Minute, 10*time.Minute)
+	chairCache = cache.New(5*time.Minute, 10*time.Minute)
 
 	// Start server
 	serverPort := fmt.Sprintf(":%v", "1323")
@@ -220,6 +222,9 @@ func initialize(c echo.Context) error {
 	}()
 	<-ch1
 	<-ch2
+
+	estateCache.Flush()
+	chairCache.Flush()
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",

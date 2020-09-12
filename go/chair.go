@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/newrelic/go-agent/v3/integrations/nrecho-v4"
@@ -168,6 +169,7 @@ func postChair(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	chairCache.Flush()
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -176,6 +178,25 @@ func searchChairs(c echo.Context) error {
 
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+
+	page, err := strconv.Atoi(c.QueryParam("page"))
+	if err != nil {
+		c.Logger().Infof("Invalid format page parameter : %v", err)
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	perPage, err := strconv.Atoi(c.QueryParam("perPage"))
+	if err != nil {
+		c.Logger().Infof("Invalid format perPage parameter : %v", err)
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	if page == 0 {
+		r, ok := chairCache.Get(c.Request().URL.RawQuery)
+		if ok {
+			return c.JSON(http.StatusOK, r)
+		}
+	}
 
 	if c.QueryParam("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
@@ -269,18 +290,6 @@ func searchChairs(c echo.Context) error {
 
 	conditions = append(conditions, "stock > 0")
 
-	page, err := strconv.Atoi(c.QueryParam("page"))
-	if err != nil {
-		c.Logger().Infof("Invalid format page parameter : %v", err)
-		return c.NoContent(http.StatusBadRequest)
-	}
-
-	perPage, err := strconv.Atoi(c.QueryParam("perPage"))
-	if err != nil {
-		c.Logger().Infof("Invalid format perPage parameter : %v", err)
-		return c.NoContent(http.StatusBadRequest)
-	}
-
 	searchQuery := "SELECT * FROM chair WHERE "
 	countQuery := "SELECT COUNT(*) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
@@ -305,6 +314,10 @@ func searchChairs(c echo.Context) error {
 	}
 
 	res.Chairs = chairs
+
+	if page == 0 {
+		_ = chairCache.Add(c.Request().URL.RawQuery, res, time.Minute*3)
+	}
 
 	return c.JSON(http.StatusOK, res)
 }
@@ -359,6 +372,7 @@ func buyChair(c echo.Context) error {
 		c.Echo().Logger.Errorf("transaction commit error : %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	chairCache.Flush()
 
 	return c.NoContent(http.StatusOK)
 }
