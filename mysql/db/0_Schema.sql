@@ -22,7 +22,8 @@ CREATE TABLE isuumo.estate
 
 CREATE INDEX estate_latitude ON issumo.estate (latitude);
 CREATE INDEX estate_longitude ON issumo.estate (longitude);
-CREATE INDEX estate_popularity ON issumo.estate (popularity);
+CREATE INDEX estate_popularity ON issumo.estate (popularity desc);
+CREATE INDEX estate_rent ON issumo.estate (rent);
 
 CREATE TABLE isuumo.chair
 (
@@ -41,6 +42,6 @@ CREATE TABLE isuumo.chair
     stock       INTEGER         NOT NULL
 );
 
-CREATE INDEX chair_popularity ON issumo.chair (popularity);
+CREATE INDEX chair_popularity ON issumo.chair (popularity desc);
 CREATE INDEX chair_stock ON issumo.stock (stock);
 CREATE INDEX chair_price ON issumo.price (price);
