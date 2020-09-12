@@ -176,22 +176,21 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 	}
 
-	go func() {
-		for _, p := range paths {
-			sqlFile, _ := filepath.Abs(p)
-			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-				mySQLConnectionData.withState.Host,
-				mySQLConnectionData.withState.User,
-				mySQLConnectionData.withState.Password,
-				mySQLConnectionData.withState.Port,
-				mySQLConnectionData.withState.DBName,
-				sqlFile,
-			)
-			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
-				c.Logger().Errorf("Initialize script error : %v", err)
-			}
+	for _, p := range paths {
+		sqlFile, _ := filepath.Abs(p)
+		cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+			mySQLConnectionData.withState.Host,
+			mySQLConnectionData.withState.User,
+			mySQLConnectionData.withState.Password,
+			mySQLConnectionData.withState.Port,
+			mySQLConnectionData.withState.DBName,
+			sqlFile,
+		)
+		if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
+			c.Logger().Errorf("Initialize script error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
 		}
-	}()
+	}
 
 	for _, p := range paths {
 		sqlFile, _ := filepath.Abs(p)
