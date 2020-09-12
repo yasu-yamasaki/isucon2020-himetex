@@ -111,7 +111,6 @@ func postChair(c echo.Context) error {
 
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
-	stopchan := make(chan struct{})
 	defer cancel()
 	limit := make(chan struct{}, 2)
 	for _, row := range records {
@@ -124,8 +123,6 @@ func postChair(c echo.Context) error {
 			}()
 			select {
 			case <-ctx.Done():
-				return
-			case <-stopchan:
 				return
 			default:
 			}
