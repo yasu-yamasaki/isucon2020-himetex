@@ -235,6 +235,7 @@ func searchEstates(c echo.Context) error {
 	if page == 0 {
 		r, ok := estateCache.Get(c.Request().URL.RawQuery)
 		if ok {
+			time.Sleep(time.Millisecond * cacheSleep)
 			return c.JSON(http.StatusOK, r)
 		}
 	}
@@ -316,6 +317,7 @@ func searchEstates(c echo.Context) error {
 	cc, ok := estateCache.Get(ck)
 	if ok {
 		s, _ := cc.(string)
+		time.Sleep(time.Millisecond * cacheSleep)
 		res.Count, _ = strconv.ParseInt(s, 10, 64)
 	} else {
 		err = db.noState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
