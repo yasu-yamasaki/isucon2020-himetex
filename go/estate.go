@@ -341,15 +341,15 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	d := chair.Depth
 	var q1, q2 int64
 	if w > h {
-		if w > d {
-			q1, q2 = h, d
-		}
-		q1, q2 = w, h
-	} else {
-		if h > d {
+		if d > h {
 			q1, q2 = w, d
 		}
 		q1, q2 = w, h
+	} else {
+		if w > d {
+			q1, q2 = w, h
+		}
+		q1, q2 = h, d
 	}
 	query = `SELECT * FROM estate WHERE (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
 	err = db.noState.SelectContext(ctx, &estates, query, q1, q2, q1, q2, Limit)
