@@ -3,6 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"time"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -11,13 +19,6 @@ import (
 	_ "github.com/newrelic/go-agent/v3/integrations/nrmysql"
 	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/patrickmn/go-cache"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
-	"time"
 )
 
 const Limit = 20
@@ -29,6 +30,7 @@ var estateSearchCondition EstateSearchCondition
 
 var estateCache *cache.Cache
 var chairCache *cache.Cache
+var stockCache *cache.Cache
 
 type InitializeResponse struct {
 	Language string `json:"language"`
@@ -169,6 +171,7 @@ func main() {
 
 	estateCache = cache.New(5*time.Minute, 10*time.Minute)
 	chairCache = cache.New(5*time.Minute, 10*time.Minute)
+	stockCache = cache.New(5*time.Minute, 10*time.Minute)
 
 	// Start server
 	serverPort := fmt.Sprintf(":%v", "1323")
@@ -225,6 +228,7 @@ func initialize(c echo.Context) error {
 
 	estateCache.Flush()
 	chairCache.Flush()
+	stockCache.Flush()
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",

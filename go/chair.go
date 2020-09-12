@@ -58,6 +58,9 @@ func getChairDetail(c echo.Context) error {
 		c.Echo().Logger.Errorf("Request parameter \"id\" parse error : %v", err)
 		return c.NoContent(http.StatusBadRequest)
 	}
+	if _, ok := stockCache.Get(strconv.Itoa(id)); ok {
+		return c.NoContent(http.StatusNotFound)
+	}
 
 	chair := Chair{}
 	cc, ok := chairCache.Get(strconv.Itoa(id))
@@ -74,6 +77,7 @@ func getChairDetail(c echo.Context) error {
 			c.Echo().Logger.Errorf("Failed to get the chair from id : %v", err)
 			return c.NoContent(http.StatusInternalServerError)
 		} else if chair.Stock <= 0 {
+			stockCache.Add(strconv.Itoa(id), true, 5*time.Minute)
 			c.Echo().Logger.Infof("requested id's chair is sold out : %v", id)
 			return c.NoContent(http.StatusNotFound)
 		}
@@ -162,6 +166,7 @@ func postChair(c echo.Context) error {
 				c.Logger().Errorf("failed to insert chair: %v", err)
 				panic(err)
 			}
+			stockCache.Delete(strconv.Itoa(id))
 		}(row)
 	}
 	wg.Wait()
@@ -388,6 +393,9 @@ func buyChair(c echo.Context) error {
 		c.Echo().Logger.Errorf("chair stock update failed : %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	if chair.Stock == 1 {
+		stockCache.Add(strconv.Itoa(id), true, 5*time.Minute)
+	}
 
 	err = tx.Commit()
 	if err != nil {
@@ -421,7 +429,7 @@ func getLowPricedChair(c echo.Context) error {
 			c.Logger().Errorf("getLowPricedChair DB execution error : %v", err)
 			return c.NoContent(http.StatusInternalServerError)
 		}
-		chairCache.Add()
+		chairCache.Add("LowPrice", chairs, time.Minute)
 	}
 
 	return c.JSON(http.StatusOK, ChairListResponse{Chairs: chairs})
