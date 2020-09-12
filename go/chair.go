@@ -269,6 +269,9 @@ func searchChairs(c echo.Context) error {
 		c.Logger().Errorf("searchChairs DB execution error : %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	if res.Count == 0 {
+		return c.JSON(http.StatusOK, ChairSearchResponse{Count: 0, Chairs: []Chair{}})
+	}
 
 	chairs := []Chair{}
 	params = append(params, perPage, page*perPage)
