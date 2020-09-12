@@ -23,7 +23,7 @@ import (
 
 const Limit = 20
 const NazotteLimit = 50
-const cacheSleep = 42
+const cacheSleep = 50
 
 var mySQLConnectionData MySQLConnectionEnv
 var chairSearchCondition ChairSearchCondition
