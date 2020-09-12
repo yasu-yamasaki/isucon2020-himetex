@@ -261,7 +261,7 @@ func searchChairs(c echo.Context) error {
 	searchQuery := "SELECT * FROM chair WHERE "
 	countQuery := "SELECT COUNT(*) FROM chair WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
-	limitOffset := " popularity <= ? and not (popularity=? and id > ?) ORDER BY popularity DESC, id ASC LIMIT ?"
+	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
 	var res ChairSearchResponse
 	err = db.withState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
@@ -271,7 +271,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	chairs := []Chair{}
-	params = append(params, perPage+1)
+	params = append(params, perPage, page*perPage)
 	err = db.withState.SelectContext(ctx, &chairs, searchQuery+searchCondition+limitOffset, params...)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -281,20 +281,10 @@ func searchChairs(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	if len(chairs) > perPage {
-		chairOffSetPopularity[page+1] = chairs[perPage-1].Popularity
-		chairOffSetId[page+1] = chairs[perPage-1].ID
-	}
-
 	res.Chairs = chairs
 
 	return c.JSON(http.StatusOK, res)
 }
-
-var (
-	chairOffSetPopularity = make(map[int]int64)
-	chairOffSetId         = make(map[int]int64)
-)
 
 func buyChair(c echo.Context) error {
 	ctx := newrelic.NewContext(c.Request().Context(), nrecho.FromContext(c))
