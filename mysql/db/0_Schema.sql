@@ -17,11 +17,11 @@ CREATE TABLE isuumo.estate
     door_height INTEGER             NOT NULL,
     door_width  INTEGER             NOT NULL,
     features    VARCHAR(64)         NOT NULL,
-    popularity  INTEGER             NOT NULL
+    popularity  INTEGER             NOT NULL,
+    location    GEOMETRY            NOT NULL
 );
 
-CREATE INDEX estate_latitude ON isuumo.estate (latitude);
-CREATE INDEX estate_longitude ON isuumo.estate (longitude);
+CREATE INDEX estate_latitude ON isuumo.estate (location);
 CREATE INDEX estate_popularity ON isuumo.estate (popularity desc);
 CREATE INDEX estate_rent ON isuumo.estate (rent);
 

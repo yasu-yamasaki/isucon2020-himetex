@@ -164,12 +164,12 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		_, err := tx1.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+		_, err := tx1.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, location, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,GeomFromText(POINT(?,?)))", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, latitude, longitude)
 		if err != nil {
 			c.Logger().Errorf("failed to insert estate: %v", err)
 			return c.NoContent(http.StatusInternalServerError)
 		}
-		_, err = tx2.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+		_, err = tx2.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, location, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,GeomFromText(POINT(?,?)))", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity, latitude, longitude)
 		if err != nil {
 			c.Logger().Errorf("failed to insert estate: %v", err)
 			return c.NoContent(http.StatusInternalServerError)
@@ -382,8 +382,8 @@ func searchEstateNazotte(c echo.Context) error {
 
 	b := coordinates.getBoundingBox()
 	estatesInBoundingBox := []Estate{}
-	query := `SELECT * FROM estate WHERE latitude <= ? AND latitude >= ? AND longitude <= ? AND longitude >= ? ORDER BY popularity DESC, id ASC`
-	err = db.noState.SelectContext(ctx, &estatesInBoundingBox, query, b.BottomRightCorner.Latitude, b.TopLeftCorner.Latitude, b.BottomRightCorner.Longitude, b.TopLeftCorner.Longitude)
+	query := `SELECT * FROM estate WHERE latitude between ? AND ? AND longitude between ? AND ? ORDER BY popularity DESC, id ASC`
+	err = db.noState.SelectContext(ctx, &estatesInBoundingBox, query, b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, b.TopLeftCorner.Longitude, b.BottomRightCorner.Longitude)
 	if err == sql.ErrNoRows {
 		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
