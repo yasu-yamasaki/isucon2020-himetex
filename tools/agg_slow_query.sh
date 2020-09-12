@@ -1,0 +1,1 @@
+sudo mysqldumpslow -s t /tmp/mysql-slow.log > /tmp/agg_slow.log
