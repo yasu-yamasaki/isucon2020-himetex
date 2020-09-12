@@ -1,1 +1,0 @@
-alp -f /var/log/nginx/access2.log --sum -r > out.txt

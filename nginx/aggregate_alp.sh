@@ -1,0 +1,1 @@
+sudo alp -f /var/log/nginx/access.log --sum -r > /tmp/alp_score.txt
