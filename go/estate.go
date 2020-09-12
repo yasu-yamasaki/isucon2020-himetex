@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -147,34 +149,56 @@ func postEstate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx2.Rollback()
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	limit := make(chan struct{}, 2)
 	for _, row := range records {
-		rm := RecordMapper{Record: row}
-		id := rm.NextInt()
-		name := rm.NextString()
-		description := rm.NextString()
-		thumbnail := rm.NextString()
-		address := rm.NextString()
-		latitude := rm.NextFloat()
-		longitude := rm.NextFloat()
-		rent := rm.NextInt()
-		doorHeight := rm.NextInt()
-		doorWidth := rm.NextInt()
-		features := rm.NextString()
-		popularity := rm.NextInt()
-		if err := rm.Err(); err != nil {
-			c.Logger().Errorf("failed to read record: %v", err)
-			return c.NoContent(http.StatusBadRequest)
-		}
-		_, err := tx1.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-		if err != nil {
-			c.Logger().Errorf("failed to insert estate: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		_, err = tx2.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-		if err != nil {
-			c.Logger().Errorf("failed to insert estate: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		wg.Add(1)
+		limit <- struct{}{}
+		go func(row []string) {
+			defer func() {
+				wg.Done()
+				<-limit
+			}()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			rm := RecordMapper{Record: row}
+			id := rm.NextInt()
+			name := rm.NextString()
+			description := rm.NextString()
+			thumbnail := rm.NextString()
+			address := rm.NextString()
+			latitude := rm.NextFloat()
+			longitude := rm.NextFloat()
+			rent := rm.NextInt()
+			doorHeight := rm.NextInt()
+			doorWidth := rm.NextInt()
+			features := rm.NextString()
+			popularity := rm.NextInt()
+			if err := rm.Err(); err != nil {
+				c.Logger().Errorf("failed to read record: %v", err)
+				cancel()
+			}
+			_, err := tx1.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+			if err != nil {
+				c.Logger().Errorf("failed to insert estate: %v", err)
+				panic(err)
+			}
+			_, err = tx2.ExecContext(ctx, "INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
+			if err != nil {
+				c.Logger().Errorf("failed to insert estate: %v", err)
+				panic(err)
+			}
+		}(row)
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		return c.NoContent(http.StatusBadRequest)
 	}
 	if err := tx1.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
