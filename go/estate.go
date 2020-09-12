@@ -432,9 +432,9 @@ func searchEstateNazotte(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	var mutex = &sync.Mutex{}
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
-	stopchan := make(chan struct{})
 	defer cancel()
 	limit := make(chan struct{}, 3)
 	estatesInPolygon := []Estate{}
@@ -449,8 +449,6 @@ func searchEstateNazotte(c echo.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case <-stopchan:
-				return
 			default:
 			}
 
@@ -463,10 +461,12 @@ func searchEstateNazotte(c echo.Context) error {
 				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
 				cancel()
 			} else {
+				mutex.Lock()
 				estatesInPolygon = append(estatesInPolygon, validatedEstate)
+				mutex.Unlock()
 			}
 			if len(estatesInPolygon) >= NazotteLimit {
-				stopchan <- struct{}{}
+				cancel()
 			}
 		}(estate)
 	}
