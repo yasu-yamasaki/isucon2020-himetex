@@ -305,7 +305,7 @@ func main() {
 	defer db.noState.Close()
 
 	// Start server
-	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
+	serverPort := fmt.Sprintf(":%v", "1323")
 	e.Logger.Fatal(e.Start(serverPort))
 }
 
