@@ -178,23 +178,28 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 	}
 
-	ctx := context.Background()
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	limit := make(chan struct{}, 1)
+	ctx1 := context.Background()
+	ctx2 := context.Background()
+	var wg1 sync.WaitGroup
+	var wg2 sync.WaitGroup
+	ctx1, cancel1 := context.WithCancel(ctx1)
+	ctx2, cancel2 := context.WithCancel(ctx2)
+	defer cancel1()
+	defer cancel2()
+	limit1 := make(chan struct{}, 1)
+	limit2 := make(chan struct{}, 1)
 	for _, p := range paths {
 		sqlFile, _ := filepath.Abs(p)
 
 		go func() {
-			wg.Add(1)
-			limit <- struct{}{}
+			wg1.Add(1)
+			limit1 <- struct{}{}
 			defer func() {
-				wg.Done()
-				<-limit
+				wg1.Done()
+				<-limit1
 			}()
 			select {
-			case <-ctx.Done():
+			case <-ctx1.Done():
 				return
 			default:
 			}
@@ -208,23 +213,36 @@ func initialize(c echo.Context) error {
 			)
 			if err := exec.Command("bash", "-c", cmdStrWithState).Run(); err != nil {
 				c.Logger().Errorf("Initialize script error : %v", err)
-				cancel()
+				cancel1()
 			}
 		}()
-		cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-			mySQLConnectionData.noState.Host,
-			mySQLConnectionData.noState.User,
-			mySQLConnectionData.noState.Password,
-			mySQLConnectionData.noState.Port,
-			mySQLConnectionData.noState.DBName,
-			sqlFile,
-		)
-		if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
-			c.Logger().Errorf("Initialize script error : %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		go func() {
+			wg2.Add(1)
+			limit2 <- struct{}{}
+			defer func() {
+				wg2.Done()
+				<-limit1
+			}()
+			select {
+			case <-ctx2.Done():
+				return
+			default:
+			}
+			cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+				mySQLConnectionData.noState.Host,
+				mySQLConnectionData.noState.User,
+				mySQLConnectionData.noState.Password,
+				mySQLConnectionData.noState.Port,
+				mySQLConnectionData.noState.DBName,
+				sqlFile,
+			)
+			if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
+				c.Logger().Errorf("Initialize script error : %v", err)
+				cancel2()
+			}
+		}()
 	}
-	if ctx.Err() != nil {
+	if ctx1.Err() != nil || ctx2.Err() != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
