@@ -370,6 +370,10 @@ func buyChair(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
+	if _, ok := stockCache.Get(strconv.Itoa(id)); ok {
+		return c.NoContent(http.StatusNotFound)
+	}
+
 	tx, err := db.withState.Beginx()
 	if err != nil {
 		c.Echo().Logger.Errorf("failed to create transaction : %v", err)
