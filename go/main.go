@@ -221,7 +221,7 @@ func initialize(c echo.Context) error {
 			limit2 <- struct{}{}
 			defer func() {
 				wg2.Done()
-				<-limit1
+				<-limit2
 			}()
 			select {
 			case <-ctx2.Done():
