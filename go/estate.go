@@ -194,7 +194,6 @@ func searchEstates(c echo.Context) error {
 
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
-	ck := ""
 
 	page, err := strconv.Atoi(c.QueryParam("page"))
 	if err != nil {
@@ -217,7 +216,6 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("doorHeightRangeId") != "" {
 		doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.QueryParam("doorHeightRangeId"))
-		ck += c.QueryParam("doorHeightRangeId")
 		if err != nil {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -226,7 +224,6 @@ func searchEstates(c echo.Context) error {
 		if doorHeight.Min != -1 {
 			conditions = append(conditions, "door_height >= ?")
 			params = append(params, doorHeight.Min)
-
 		}
 		if doorHeight.Max != -1 {
 			conditions = append(conditions, "door_height < ?")
@@ -236,7 +233,6 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("doorWidthRangeId") != "" {
 		doorWidth, err := getRange(estateSearchCondition.DoorWidth, c.QueryParam("doorWidthRangeId"))
-		ck += c.QueryParam("doorWidthRangeId")
 		if err != nil {
 			c.Echo().Logger.Infof("doorWidthRangeID invalid, %v : %v", c.QueryParam("doorWidthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -254,7 +250,6 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("rentRangeId") != "" {
 		estateRent, err := getRange(estateSearchCondition.Rent, c.QueryParam("rentRangeId"))
-		ck += c.QueryParam("rentRangeId")
 		if err != nil {
 			c.Echo().Logger.Infof("rentRangeID invalid, %v : %v", c.QueryParam("rentRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -271,7 +266,6 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
-		ck += c.QueryParam("features")
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
@@ -289,17 +283,10 @@ func searchEstates(c echo.Context) error {
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
 	var res EstateSearchResponse
-	cc, ok := estateCache.Get(ck)
-	if ok {
-		s, _ := cc.(string)
-		res.Count, _ = strconv.ParseInt(s, 10, 64)
-	} else {
-		err = db.noState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
-		if err != nil {
-			c.Logger().Errorf("searchEstates DB execution error : %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		_ = estateCache.Add(ck, strconv.FormatInt(res.Count, 10), time.Minute*1)
+	err = db.noState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
+	if err != nil {
+		c.Logger().Errorf("searchEstates DB execution error : %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if res.Count == 0 {
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
