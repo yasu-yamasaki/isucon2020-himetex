@@ -100,12 +100,12 @@ func postChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer tx1.Rollback()
-	// tx2, err := db.noState.Begin()
-	// if err != nil {
-	// 	c.Logger().Errorf("failed to begin tx: %v", err)
-	// 	return c.NoContent(http.StatusInternalServerError)
-	// }
-	// defer tx2.Rollback()
+	tx2, err := db.noState.Begin()
+	if err != nil {
+		c.Logger().Errorf("failed to begin tx: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	defer tx2.Rollback()
 
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
@@ -131,20 +131,20 @@ func postChair(c echo.Context) error {
 			c.Logger().Errorf("failed to insert chair: %v", err)
 			return c.NoContent(http.StatusInternalServerError)
 		}
-		// _, err = tx2.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		// if err != nil {
-		// 	c.Logger().Errorf("failed to insert chair: %v", err)
-		// 	return c.NoContent(http.StatusInternalServerError)
-		// }
+		_, err = tx2.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+		if err != nil {
+			c.Logger().Errorf("failed to insert chair: %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
 	}
 	if err := tx1.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	// if err := tx2.Commit(); err != nil {
-	// 	c.Logger().Errorf("failed to commit tx: %v", err)
-	// 	return c.NoContent(http.StatusInternalServerError)
-	// }
+	if err := tx2.Commit(); err != nil {
+		c.Logger().Errorf("failed to commit tx: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
 	return c.NoContent(http.StatusCreated)
 }
 
