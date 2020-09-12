@@ -59,12 +59,14 @@ func getChairDetail(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 	if _, ok := stockCache.Get(strconv.Itoa(id)); ok {
+		time.Sleep(time.Millisecond * cacheSleep)
 		return c.NoContent(http.StatusNotFound)
 	}
 
 	chair := Chair{}
 	cc, ok := chairCache.Get(strconv.Itoa(id))
 	if ok {
+		time.Sleep(time.Millisecond * cacheSleep)
 		chair, _ = cc.(Chair)
 	} else {
 		query := `SELECT * FROM chair WHERE id = ?`
@@ -207,6 +209,7 @@ func searchChairs(c echo.Context) error {
 	if page == 0 {
 		r, ok := chairCache.Get(c.Request().URL.RawQuery)
 		if ok {
+			time.Sleep(time.Millisecond * cacheSleep)
 			return c.JSON(http.StatusOK, r)
 		}
 	}
@@ -318,6 +321,7 @@ func searchChairs(c echo.Context) error {
 	var res ChairSearchResponse
 	cc, ok := chairCache.Get(ck)
 	if ok {
+		time.Sleep(time.Millisecond * cacheSleep)
 		s, _ := cc.(string)
 		res.Count, _ = strconv.ParseInt(s, 10, 64)
 	} else {
@@ -371,6 +375,7 @@ func buyChair(c echo.Context) error {
 	}
 
 	if _, ok := stockCache.Get(strconv.Itoa(id)); ok {
+		time.Sleep(time.Millisecond * cacheSleep)
 		return c.NoContent(http.StatusNotFound)
 	}
 
@@ -421,6 +426,7 @@ func getLowPricedChair(c echo.Context) error {
 	var chairs []Chair
 	l, ok := chairCache.Get("LowPrice")
 	if ok {
+		time.Sleep(time.Millisecond * cacheSleep)
 		chairs = l.([]Chair)
 	} else {
 		query := `SELECT * FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
