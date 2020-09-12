@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -108,35 +110,57 @@ func postChair(c echo.Context) error {
 	}
 	defer tx2.Rollback()
 
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	limit := make(chan struct{}, 2)
 	for _, row := range records {
-		rm := RecordMapper{Record: row}
-		id := rm.NextInt()
-		name := rm.NextString()
-		description := rm.NextString()
-		thumbnail := rm.NextString()
-		price := rm.NextInt()
-		height := rm.NextInt()
-		width := rm.NextInt()
-		depth := rm.NextInt()
-		color := rm.NextString()
-		features := rm.NextString()
-		kind := rm.NextString()
-		popularity := rm.NextInt()
-		stock := rm.NextInt()
-		if err := rm.Err(); err != nil {
-			c.Logger().Errorf("failed to read record: %v", err)
-			return c.NoContent(http.StatusBadRequest)
-		}
-		_, err := tx1.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		if err != nil {
-			c.Logger().Errorf("failed to insert chair: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		_, err = tx2.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		if err != nil {
-			c.Logger().Errorf("failed to insert chair: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		wg.Add(1)
+		limit <- struct{}{}
+		go func(row []string) {
+			defer func() {
+				wg.Done()
+				<-limit
+			}()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			rm := RecordMapper{Record: row}
+			id := rm.NextInt()
+			name := rm.NextString()
+			description := rm.NextString()
+			thumbnail := rm.NextString()
+			price := rm.NextInt()
+			height := rm.NextInt()
+			width := rm.NextInt()
+			depth := rm.NextInt()
+			color := rm.NextString()
+			features := rm.NextString()
+			kind := rm.NextString()
+			popularity := rm.NextInt()
+			stock := rm.NextInt()
+			if err := rm.Err(); err != nil {
+				c.Logger().Errorf("failed to read record: %v", err)
+				cancel()
+			}
+			_, err := tx1.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+			if err != nil {
+				c.Logger().Errorf("failed to insert chair: %v", err)
+				panic(err)
+			}
+			_, err = tx2.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+			if err != nil {
+				c.Logger().Errorf("failed to insert chair: %v", err)
+				panic(err)
+			}
+		}(row)
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		return c.NoContent(http.StatusBadRequest)
 	}
 	if err := tx1.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -155,6 +179,7 @@ func searchChairs(c echo.Context) error {
 
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+	ck := ""
 
 	page, err := strconv.Atoi(c.QueryParam("page"))
 	if err != nil {
@@ -176,6 +201,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("priceRangeId") != "" {
+		ck += c.QueryParam("priceRangeId")
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
@@ -193,6 +219,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("heightRangeId") != "" {
+		ck += c.QueryParam("heightRangeId")
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("heightRangeIf invalid, %v : %v", c.QueryParam("heightRangeId"), err)
@@ -210,6 +237,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("widthRangeId") != "" {
+		ck += c.QueryParam("widthRangeId")
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("widthRangeID invalid, %v : %v", c.QueryParam("widthRangeId"), err)
@@ -227,6 +255,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("depthRangeId") != "" {
+		ck += c.QueryParam("depthRangeId")
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
@@ -244,16 +273,19 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("kind") != "" {
+		ck += c.QueryParam("kind")
 		conditions = append(conditions, "kind = ?")
 		params = append(params, c.QueryParam("kind"))
 	}
 
 	if c.QueryParam("color") != "" {
+		ck += c.QueryParam("color")
 		conditions = append(conditions, "color = ?")
 		params = append(params, c.QueryParam("color"))
 	}
 
 	if c.QueryParam("features") != "" {
+		ck += c.QueryParam("features")
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
 			params = append(params, f)
@@ -273,13 +305,17 @@ func searchChairs(c echo.Context) error {
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
 	var res ChairSearchResponse
-	err = db.withState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchChairs DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	if res.Count == 0 {
-		return c.JSON(http.StatusOK, ChairSearchResponse{Count: 0, Chairs: []Chair{}})
+	cc, ok := chairCache.Get(ck)
+	if ok {
+		s, _ := cc.(string)
+		res.Count, _ = strconv.ParseInt(s, 10, 64)
+	} else {
+		err = db.withState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchChairs DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		_ = chairCache.Add(ck, strconv.FormatInt(res.Count, 10), time.Minute*1)
 	}
 
 	chairs := []Chair{}
