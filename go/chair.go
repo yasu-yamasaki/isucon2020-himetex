@@ -60,18 +60,24 @@ func getChairDetail(c echo.Context) error {
 	}
 
 	chair := Chair{}
-	query := `SELECT * FROM chair WHERE id = ?`
-	err = db.withState.GetContext(ctx, &chair, query, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			c.Echo().Logger.Infof("requested id's chair not found : %v", id)
+	cc, ok := chairCache.Get(strconv.Itoa(id))
+	if ok {
+		chair, _ := cc.(Chair)
+	} else {
+		query := `SELECT * FROM chair WHERE id = ?`
+		err = db.withState.GetContext(ctx, &chair, query, id)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.Echo().Logger.Infof("requested id's chair not found : %v", id)
+				return c.NoContent(http.StatusNotFound)
+			}
+			c.Echo().Logger.Errorf("Failed to get the chair from id : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		} else if chair.Stock <= 0 {
+			c.Echo().Logger.Infof("requested id's chair is sold out : %v", id)
 			return c.NoContent(http.StatusNotFound)
 		}
-		c.Echo().Logger.Errorf("Failed to get the chair from id : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
-	} else if chair.Stock <= 0 {
-		c.Echo().Logger.Infof("requested id's chair is sold out : %v", id)
-		return c.NoContent(http.StatusNotFound)
+		chairCache.Add(strconv.Itoa(id), chair, time.Minute*1)
 	}
 
 	return c.JSON(http.StatusOK, chair)
