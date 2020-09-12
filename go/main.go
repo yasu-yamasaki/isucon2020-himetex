@@ -242,6 +242,8 @@ func initialize(c echo.Context) error {
 			}
 		}()
 	}
+	wg1.Wait()
+	wg2.Wait()
 	if ctx1.Err() != nil || ctx2.Err() != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
