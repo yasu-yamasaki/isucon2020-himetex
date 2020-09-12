@@ -158,6 +158,7 @@ func postChair(c echo.Context) error {
 			}
 		}(row)
 	}
+	wg.Wait()
 	if ctx.Err() != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
