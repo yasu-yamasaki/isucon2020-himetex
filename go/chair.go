@@ -155,6 +155,7 @@ func searchChairs(c echo.Context) error {
 
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+	ck := ""
 
 	page, err := strconv.Atoi(c.QueryParam("page"))
 	if err != nil {
@@ -176,6 +177,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("priceRangeId") != "" {
+		ck += c.QueryParam("priceRangeId")
 		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
@@ -193,6 +195,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("heightRangeId") != "" {
+		ck += c.QueryParam("heightRangeId")
 		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("heightRangeIf invalid, %v : %v", c.QueryParam("heightRangeId"), err)
@@ -210,6 +213,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("widthRangeId") != "" {
+		ck += c.QueryParam("widthRangeId")
 		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("widthRangeID invalid, %v : %v", c.QueryParam("widthRangeId"), err)
@@ -227,6 +231,7 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("depthRangeId") != "" {
+		ck += c.QueryParam("depthRangeId")
 		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
@@ -244,16 +249,19 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("kind") != "" {
+		ck += c.QueryParam("kind")
 		conditions = append(conditions, "kind = ?")
 		params = append(params, c.QueryParam("kind"))
 	}
 
 	if c.QueryParam("color") != "" {
+		ck += c.QueryParam("color")
 		conditions = append(conditions, "color = ?")
 		params = append(params, c.QueryParam("color"))
 	}
 
 	if c.QueryParam("features") != "" {
+		ck += c.QueryParam("features")
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
 			params = append(params, f)
@@ -273,10 +281,17 @@ func searchChairs(c echo.Context) error {
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
 	var res ChairSearchResponse
-	err = db.withState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchChairs DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	cc, ok := chairCache.Get(ck)
+	if ok {
+		s, _ := cc.(string)
+		res.Count, _ = strconv.ParseInt(s, 10, 64)
+	} else {
+		err = db.withState.GetContext(ctx, &res.Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchChairs DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		_ = chairCache.Add(ck, strconv.FormatInt(res.Count, 10), time.Minute*1)
 	}
 	if res.Count == 0 {
 		return c.JSON(http.StatusOK, ChairSearchResponse{Count: 0, Chairs: []Chair{}})
