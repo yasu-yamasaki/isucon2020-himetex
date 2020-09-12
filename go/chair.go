@@ -62,7 +62,7 @@ func getChairDetail(c echo.Context) error {
 	chair := Chair{}
 	cc, ok := chairCache.Get(strconv.Itoa(id))
 	if ok {
-		chair, _ := cc.(Chair)
+		chair, _ = cc.(Chair)
 	} else {
 		query := `SELECT * FROM chair WHERE id = ?`
 		err = db.withState.GetContext(ctx, &chair, query, id)
