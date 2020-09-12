@@ -3,13 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
-
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -17,6 +10,14 @@ import (
 	"github.com/newrelic/go-agent/v3/integrations/nrecho-v4"
 	_ "github.com/newrelic/go-agent/v3/integrations/nrmysql"
 	"github.com/newrelic/go-agent/v3/newrelic"
+	"github.com/patrickmn/go-cache"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"time"
 )
 
 const Limit = 20
@@ -25,6 +26,8 @@ const NazotteLimit = 50
 var mySQLConnectionData MySQLConnectionEnv
 var chairSearchCondition ChairSearchCondition
 var estateSearchCondition EstateSearchCondition
+
+var estateCache *cache.Cache
 
 type InitializeResponse struct {
 	Language string `json:"language"`
@@ -162,6 +165,8 @@ func main() {
 	db.noState.SetMaxOpenConns(10)
 	defer db.withState.Close()
 	defer db.noState.Close()
+
+	estateCache = cache.New(5*time.Minute, 10*time.Minute)
 
 	// Start server
 	serverPort := fmt.Sprintf(":%v", "1323")

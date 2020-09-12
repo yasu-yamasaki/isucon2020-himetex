@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/newrelic/go-agent/v3/integrations/nrecho-v4"
@@ -183,6 +184,7 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	estateCache.Flush()
 
 	return c.NoContent(http.StatusCreated)
 }
@@ -192,6 +194,25 @@ func searchEstates(c echo.Context) error {
 
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
+
+	page, err := strconv.Atoi(c.QueryParam("page"))
+	if err != nil {
+		c.Logger().Infof("Invalid format page parameter : %v", err)
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	perPage, err := strconv.Atoi(c.QueryParam("perPage"))
+	if err != nil {
+		c.Logger().Infof("Invalid format perPage parameter : %v", err)
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	if page == 0 {
+		r, ok := estateCache.Get(c.Request().URL.RawQuery)
+		if ok {
+			return c.JSON(http.StatusOK, r)
+		}
+	}
 
 	if c.QueryParam("doorHeightRangeId") != "" {
 		doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.QueryParam("doorHeightRangeId"))
@@ -256,18 +277,6 @@ func searchEstates(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	page, err := strconv.Atoi(c.QueryParam("page"))
-	if err != nil {
-		c.Logger().Infof("Invalid format page parameter : %v", err)
-		return c.NoContent(http.StatusBadRequest)
-	}
-
-	perPage, err := strconv.Atoi(c.QueryParam("perPage"))
-	if err != nil {
-		c.Logger().Infof("Invalid format perPage parameter : %v", err)
-		return c.NoContent(http.StatusBadRequest)
-	}
-
 	searchQuery := "SELECT * FROM estate WHERE "
 	countQuery := "SELECT COUNT(*) FROM estate WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
@@ -295,6 +304,10 @@ func searchEstates(c echo.Context) error {
 	}
 
 	res.Estates = estates
+
+	if page == 0 {
+		_ = estateCache.Add(c.Request().URL.RawQuery, res, time.Minute*3)
+	}
 
 	return c.JSON(http.StatusOK, res)
 }
