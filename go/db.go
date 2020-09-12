@@ -24,18 +24,18 @@ type MySQLConnectionEnv struct {
 
 func NewMySQLConnectionEnv() (res MySQLConnectionEnv) {
 	res.withState = &MySQLConnectionEnvDetail{
-		Host:     getEnv("MYSQL_HOST", "10.161.12.102"),
-		Port:     getEnv("MYSQL_PORT", "3306"),
-		User:     getEnv("MYSQL_USER", "isucon"),
-		DBName:   getEnv("MYSQL_DBNAME", "isuumo"),
-		Password: getEnv("MYSQL_PASS", "isucon"),
+		Host:     "10.161.12.102",
+		Port:     "3306",
+		User:     "isucon",
+		DBName:   "isuumo",
+		Password: "isucon",
 	}
 	res.noState = &MySQLConnectionEnvDetail{
-		Host:     getEnv("MYSQL_HOST", "10.161.12.103"),
-		Port:     getEnv("MYSQL_PORT", "3306"),
-		User:     getEnv("MYSQL_USER", "isucon"),
-		DBName:   getEnv("MYSQL_DBNAME", "isuumo"),
-		Password: getEnv("MYSQL_PASS", "isucon"),
+		Host:     "10.161.12.103",
+		Port:     "3306",
+		User:     "isucon",
+		DBName:   "isuumo",
+		Password: "isucon",
 	}
 	return res
 }

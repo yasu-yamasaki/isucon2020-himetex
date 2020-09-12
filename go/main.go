@@ -88,14 +88,6 @@ func (r *RecordMapper) Err() error {
 	return r.err
 }
 
-func getEnv(key, defaultValue string) string {
-	val := os.Getenv(key)
-	if val != "" {
-		return val
-	}
-	return defaultValue
-}
-
 //ConnectDB isuumoデータベースに接続する
 func (mc MySQLConnectionEnv) ConnectDB() (dbType, error) {
 	withState, _ := sqlx.Open("nrmysql", fmt.Sprintf("%v:%v@tcp(%v:%v)/%v", mc.withState.User, mc.withState.Password, mc.withState.Host, mc.withState.Port, mc.withState.DBName))
@@ -172,7 +164,7 @@ func main() {
 	defer db.noState.Close()
 
 	// Start server
-	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
+	serverPort := fmt.Sprintf(":%v", "1323")
 	e.Logger.Fatal(e.Start(serverPort))
 }
 
