@@ -31,7 +31,7 @@ func NewMySQLConnectionEnv() (res MySQLConnectionEnv) {
 		Password: "isucon",
 	}
 	res.noState = &MySQLConnectionEnvDetail{
-		Host:     "localhost",
+		Host:     "10.161.12.103",
 		Port:     "3306",
 		User:     "isucon",
 		DBName:   "isuumo",
