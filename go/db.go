@@ -24,7 +24,7 @@ type MySQLConnectionEnv struct {
 
 func NewMySQLConnectionEnv() (res MySQLConnectionEnv) {
 	res.withState = &MySQLConnectionEnvDetail{
-		Host:     "10.161.12.102",
+		Host:     "10.161.12.103",
 		Port:     "3306",
 		User:     "isucon",
 		DBName:   "isuumo",

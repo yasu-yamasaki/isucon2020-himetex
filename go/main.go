@@ -211,18 +211,18 @@ func initialize(c echo.Context) error {
 				cancel1()
 			}
 		}()
-		cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-			mySQLConnectionData.noState.Host,
-			mySQLConnectionData.noState.User,
-			mySQLConnectionData.noState.Password,
-			mySQLConnectionData.noState.Port,
-			mySQLConnectionData.noState.DBName,
-			sqlFile,
-		)
-		if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
-			c.Logger().Errorf("Initialize script error : %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		// cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+		// 	mySQLConnectionData.noState.Host,
+		// 	mySQLConnectionData.noState.User,
+		// 	mySQLConnectionData.noState.Password,
+		// 	mySQLConnectionData.noState.Port,
+		// 	mySQLConnectionData.noState.DBName,
+		// 	sqlFile,
+		// )
+		// if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
+		// 	c.Logger().Errorf("Initialize script error : %v", err)
+		// 	return c.NoContent(http.StatusInternalServerError)
+		// }
 	}
 	wg1.Wait()
 	if ctx1.Err() != nil {
