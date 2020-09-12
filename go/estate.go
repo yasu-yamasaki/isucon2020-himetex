@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -410,39 +408,27 @@ func searchEstateNazotte(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	limit := make(chan struct{}, 3)
 	estatesInPolygon := []Estate{}
 	for _, estate := range estatesInBoundingBox {
-		wg.Add(1)
-		limit <- struct{}{}
-		go func(estate Estate) {
-			defer func() {
-				wg.Done()
-				<-limit
-			}()
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+		validatedEstate := Estate{}
 
-			validatedEstate := Estate{}
-
-			point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
-			query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
-			err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
-			if err == nil {
-				estatesInPolygon = append(estatesInPolygon, validatedEstate)
+		point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
+		query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
+		err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			} else {
+				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
+				return c.NoContent(http.StatusInternalServerError)
 			}
-			if len(estatesInPolygon) > NazotteLimit {
-				cancel()
-			}
-		}(estate)
+		} else {
+			estatesInPolygon = append(estatesInPolygon, validatedEstate)
+		}
+		if len(estatesInPolygon) > NazotteLimit {
+			break
+		}
 	}
-	wg.Wait()
 
 	var re EstateSearchResponse
 	re.Estates = []Estate{}
