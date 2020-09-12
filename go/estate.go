@@ -432,26 +432,47 @@ func searchEstateNazotte(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	var mutex = &sync.Mutex{}
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	limit := make(chan struct{}, 3)
 	estatesInPolygon := []Estate{}
 	for _, estate := range estatesInBoundingBox {
-		validatedEstate := Estate{}
-
-		point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
-		query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
-		err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				continue
-			} else {
-				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
-				return c.NoContent(http.StatusInternalServerError)
+		wg.Add(1)
+		limit <- struct{}{}
+		go func(estate Estate) {
+			defer func() {
+				wg.Done()
+				<-limit
+			}()
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
-		} else {
-			estatesInPolygon = append(estatesInPolygon, validatedEstate)
-		}
-		if len(estatesInPolygon) > NazotteLimit {
-			break
-		}
+
+			validatedEstate := Estate{}
+
+			point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
+			query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
+			err = db.noState.GetContext(ctx, &validatedEstate, query, estate.ID)
+			if err != nil && err != sql.ErrNoRows {
+				c.Echo().Logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
+				cancel()
+			} else {
+				mutex.Lock()
+				estatesInPolygon = append(estatesInPolygon, validatedEstate)
+				mutex.Unlock()
+			}
+			if len(estatesInPolygon) >= NazotteLimit {
+				cancel()
+			}
+		}(estate)
+	}
+	wg.Wait()
+	if ctx.Err() != nil && len(estatesInPolygon) < NazotteLimit {
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	var re EstateSearchResponse
