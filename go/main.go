@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -176,32 +178,54 @@ func initialize(c echo.Context) error {
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 	}
 
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	limit := make(chan struct{}, 2)
 	for _, p := range paths {
-		sqlFile, _ := filepath.Abs(p)
-		cmdStrWithState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-			mySQLConnectionData.withState.Host,
-			mySQLConnectionData.withState.User,
-			mySQLConnectionData.withState.Password,
-			mySQLConnectionData.withState.Port,
-			mySQLConnectionData.withState.DBName,
-			sqlFile,
-		)
-		if err := exec.Command("bash", "-c", cmdStrWithState).Run(); err != nil {
-			c.Logger().Errorf("Initialize script error : %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-			mySQLConnectionData.noState.Host,
-			mySQLConnectionData.noState.User,
-			mySQLConnectionData.noState.Password,
-			mySQLConnectionData.noState.Port,
-			mySQLConnectionData.noState.DBName,
-			sqlFile,
-		)
-		if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
-			c.Logger().Errorf("Initialize script error : %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		wg.Add(1)
+		limit <- struct{}{}
+		go func() {
+			defer func() {
+				wg.Done()
+				<-limit
+			}()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			sqlFile, _ := filepath.Abs(p)
+			cmdStrWithState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+				mySQLConnectionData.withState.Host,
+				mySQLConnectionData.withState.User,
+				mySQLConnectionData.withState.Password,
+				mySQLConnectionData.withState.Port,
+				mySQLConnectionData.withState.DBName,
+				sqlFile,
+			)
+			if err := exec.Command("bash", "-c", cmdStrWithState).Run(); err != nil {
+				c.Logger().Errorf("Initialize script error : %v", err)
+				cancel()
+			}
+			cmdStrNoState := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+				mySQLConnectionData.noState.Host,
+				mySQLConnectionData.noState.User,
+				mySQLConnectionData.noState.Password,
+				mySQLConnectionData.noState.Port,
+				mySQLConnectionData.noState.DBName,
+				sqlFile,
+			)
+			if err := exec.Command("bash", "-c", cmdStrNoState).Run(); err != nil {
+				c.Logger().Errorf("Initialize script error : %v", err)
+				cancel()
+			}
+		}()
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	return c.JSON(http.StatusOK, InitializeResponse{
