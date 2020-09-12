@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -108,35 +110,56 @@ func postChair(c echo.Context) error {
 	}
 	defer tx2.Rollback()
 
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	limit := make(chan struct{}, 2)
 	for _, row := range records {
-		rm := RecordMapper{Record: row}
-		id := rm.NextInt()
-		name := rm.NextString()
-		description := rm.NextString()
-		thumbnail := rm.NextString()
-		price := rm.NextInt()
-		height := rm.NextInt()
-		width := rm.NextInt()
-		depth := rm.NextInt()
-		color := rm.NextString()
-		features := rm.NextString()
-		kind := rm.NextString()
-		popularity := rm.NextInt()
-		stock := rm.NextInt()
-		if err := rm.Err(); err != nil {
-			c.Logger().Errorf("failed to read record: %v", err)
-			return c.NoContent(http.StatusBadRequest)
-		}
-		_, err := tx1.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		if err != nil {
-			c.Logger().Errorf("failed to insert chair: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		_, err = tx2.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
-		if err != nil {
-			c.Logger().Errorf("failed to insert chair: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
+		wg.Add(1)
+		limit <- struct{}{}
+		go func(row []string) {
+			defer func() {
+				wg.Done()
+				<-limit
+			}()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			rm := RecordMapper{Record: row}
+			id := rm.NextInt()
+			name := rm.NextString()
+			description := rm.NextString()
+			thumbnail := rm.NextString()
+			price := rm.NextInt()
+			height := rm.NextInt()
+			width := rm.NextInt()
+			depth := rm.NextInt()
+			color := rm.NextString()
+			features := rm.NextString()
+			kind := rm.NextString()
+			popularity := rm.NextInt()
+			stock := rm.NextInt()
+			if err := rm.Err(); err != nil {
+				c.Logger().Errorf("failed to read record: %v", err)
+				cancel()
+			}
+			_, err := tx1.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+			if err != nil {
+				c.Logger().Errorf("failed to insert chair: %v", err)
+				panic(err)
+			}
+			_, err = tx2.ExecContext(ctx, "INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
+			if err != nil {
+				c.Logger().Errorf("failed to insert chair: %v", err)
+				panic(err)
+			}
+		}(row)
+	}
+	if ctx.Err() != nil {
+		return c.NoContent(http.StatusBadRequest)
 	}
 	if err := tx1.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -277,9 +300,6 @@ func searchChairs(c echo.Context) error {
 	if err != nil {
 		c.Logger().Errorf("searchChairs DB execution error : %v", err)
 		return c.NoContent(http.StatusInternalServerError)
-	}
-	if res.Count == 0 {
-		return c.JSON(http.StatusOK, ChairSearchResponse{Count: 0, Chairs: []Chair{}})
 	}
 
 	chairs := []Chair{}
